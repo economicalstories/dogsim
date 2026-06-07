@@ -72,7 +72,7 @@ test('collecting ALL bones triggers "go to sleep"', () => {
     teleportTo(game, bone);
     game.step(0.016);
   }
-  assert.strictEqual(game.state().bonesCollected, NUM_BONES, 'all bones collected');
+  assert.strictEqual(game.state().bonesCollected, game.state().boneTarget, 'all bones collected');
   assert.strictEqual(game.state().needsSleep, true, 'needsSleep flag set');
 });
 
@@ -84,16 +84,18 @@ test('reaching the house while needing sleep starts sleeping', () => {
   assert.strictEqual(game.state().needsSleep, false, 'needsSleep cleared');
 });
 
-test('waking up respawns all bones and gives +50 bonus', () => {
+test('sleeping LEVELS UP, respawns bones, and grows the goal', () => {
   const before = game.state();
   game.wakeUp();
   const after = game.state();
   const r = game.refs();
   assert.strictEqual(after.sleeping, false, 'awake again');
+  assert.strictEqual(after.level, before.level + 1, 'level went up');
   assert.strictEqual(after.bonesCollected, 0, 'bone counter reset');
-  assert.strictEqual(r.bones.length, NUM_BONES, 'bones respawned');
+  assert.ok(after.boneTarget >= before.boneTarget, 'goal grew (or held) with level');
+  assert.strictEqual(r.bones.length, after.boneTarget, 'bones respawned to new target');
   assert.ok(r.bones.every(b => !b.userData.collected && b.visible), 'all bones fresh');
-  assert.strictEqual(after.score, before.score + 50, '+50 sleep bonus');
+  assert.strictEqual(after.score, before.score + 50 * after.level, 'level-scaled bonus');
 });
 
 test('touching a kitten makes it follow you', () => {
@@ -112,11 +114,14 @@ test('touching a kitten makes it follow you', () => {
 test('joystick input moves the puppy and bounds keep it in the yard', () => {
   const r = game.refs();
   r.player.position.set(0, 0, 0);
+  // let the follow-camera settle behind the puppy first (it was elsewhere)
+  game.setInput(0, 0);
+  run(game, 25);
   const start = r.player.position.clone();
   game.setInput(0, -1); // push "up" = forward
-  run(game, 30);
+  run(game, 90);
   const moved = r.player.position.distanceTo(start);
-  assert.ok(moved > 1, 'puppy actually moved (' + moved.toFixed(2) + ')');
+  assert.ok(moved > 3, 'puppy actually moved (' + moved.toFixed(2) + ')');
   game.setInput(0, 0);
 
   // Slam toward a corner for a long time; must stay inside the world.
@@ -142,6 +147,41 @@ test('the world has fluttering butterflies', () => {
   run(game, 20);
   // wings flap & it moves along its path
   assert.ok(bf.position.y !== y0 || bf.userData.lWing.rotation.y !== 0, 'butterfly is animating');
+});
+
+test('every AI dog has a name and a personality', () => {
+  const r = game.refs();
+  for (const d of r.aiDogs) {
+    assert.ok(typeof d.userData.name === 'string' && d.userData.name.length, 'has a name');
+    assert.ok(['playful','bouncy','friendly','shy'].includes(d.userData.personality), 'valid personality');
+  }
+});
+
+test('a friendly dog runs up to the player to play', () => {
+  const r = game.refs();
+  const dog = r.aiDogs.find(d => d.userData.personality !== 'shy');
+  assert.ok(dog, 'a friendly dog exists');
+  // place the player right next to it, dog idle, then run a few frames
+  r.player.position.set(0, 0, 0);
+  dog.position.set(8, 0, 0);
+  const startDist = dog.position.distanceTo(r.player.position);
+  game.setInput(0, 0);
+  run(game, 60);
+  const endDist = dog.position.distanceTo(r.player.position);
+  assert.ok(endDist < startDist, 'dog moved closer (' + startDist.toFixed(1) + ' -> ' + endDist.toFixed(1) + ')');
+  assert.ok(['approach','play'].includes(dog.userData.aiState), 'dog is approaching/playing, not ignoring you');
+});
+
+test('a shy dog keeps its distance', () => {
+  const r = game.refs();
+  const shy = r.aiDogs.find(d => d.userData.personality === 'shy');
+  if (!shy) { assert.ok(true, 'no shy dog in this lineup'); return; }
+  r.player.position.set(0, 0, 0);
+  shy.position.set(5, 0, 0);
+  const startDist = shy.position.distanceTo(r.player.position);
+  run(game, 60);
+  const endDist = shy.position.distanceTo(r.player.position);
+  assert.ok(endDist >= startDist - 0.5, 'shy dog did not run into your arms');
 });
 
 test('runs 600 frames with AI dogs & cats without throwing', () => {

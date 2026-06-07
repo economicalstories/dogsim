@@ -16,7 +16,13 @@ designed to be played on a phone or tablet. 🐾
 - After a little sleep you **wake up**, the bones **respawn**, and you play again —
   your ⭐ score keeps growing!
 
-There are lots of other **friendly dogs** running around the world to play near. 🐶🐶🐶
+The world is full of **other puppies with names and personalities** 🐶 — the playful
+and bouncy ones notice you, run over, bounce around, and bark to play; the shy ones
+keep their distance. Look for their floating name tags!
+
+**Level up!** 🌟 Every time you collect all the bones and sleep, you reach a **new
+level** — there are more bones to find and a bigger ⭐ reward each time, so you keep
+making progress. How high can you get?
 
 Each bone has a **glowing beacon** so it's easy to spot, **butterflies** flutter around
 the meadow, and your **🏆 best score** is saved so you can try to beat it next time.
@@ -59,7 +65,10 @@ npm test
 - Pick your puppy's color on the start screen (6 cute colors).
 - Wagging tails, floppy ears, and a little run animation.
 - Open grassy world with trees, flowers, clouds, sunshine, butterflies, and doghouses.
-- Friendly AI dogs wandering everywhere.
+- Friendly AI dogs with names & personalities (playful, bouncy, friendly, shy) that
+  react to you — running over to play, bouncing, and barking.
+- Level-up progression: each sleep starts a new, slightly bigger level with a confetti
+  celebration and a level-scaled score bonus.
 - Bones to collect (with glowing beacons), kittens to befriend, and sparkly happy effects.
 - Saved 🏆 best score between visits.
 - Gentle sounds: happy chimes, barks, and meows.

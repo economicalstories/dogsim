@@ -30,9 +30,15 @@ const DOG_COLORS = [
 ];
 let chosenColor = 0;
 
+// Friendly puppies that roam the world — each has a name and a personality.
+const DOG_NAMES = ['Buddy','Bella','Max','Luna','Charlie','Daisy','Rocky','Coco','Milo','Ruby','Bailey','Lola'];
+// playful/bouncy/friendly run up to you and play; shy ones keep their distance.
+const PERSONALITIES = ['playful','bouncy','friendly','friendly','playful','shy','bouncy'];
+
 // ---------- Globals ----------
 let scene, camera, renderer, clock;
 let elapsed = 0;   // total game time, advanced by step(dt); test-friendly
+let camYaw = 0;    // smoothed camera heading; movement is relative to this
 let player, playerHouse;
 const bones = [];
 const cats = [];
@@ -44,9 +50,14 @@ let bonesCollected = 0;
 let catsCollected = 0;
 let score = 0;
 let bestScore = loadBest();
+let level = 1;
 let needsSleep = false;
 let sleeping = false;
 let started = false;
+
+// Bones to find this level — grows a little each level for a sense of progress.
+function bonesForLevel(lv){ return Math.min(NUM_BONES + (lv - 1) * 2, 18); }
+let boneTarget = bonesForLevel(level);
 
 const tmpV = new THREE.Vector3();
 
@@ -73,6 +84,33 @@ function sleepSound(){ beep(300,0.3,'sine',0.15); setTimeout(()=>beep(220,0.5,'s
 //  Dog model — built from simple shapes so it works everywhere, no assets.
 // =========================================================================
 function makeMat(color){ return new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0.0 }); }
+
+// Floating name tag (a camera-facing sprite). Browser-only: returns null in
+// headless environments without a 2D canvas, so the game still runs in tests.
+function makeNameTag(text){
+  if(typeof document === 'undefined' || !document.createElement) return null;
+  const canvas = document.createElement('canvas');
+  if(!canvas.getContext) return null;
+  const ctx = canvas.getContext('2d');
+  if(!ctx) return null;
+  canvas.width = 256; canvas.height = 64;
+  ctx.font = 'bold 40px "Comic Sans MS", sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  // soft rounded background
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  const w = Math.min(240, ctx.measureText(text).width + 36);
+  const x = 128 - w/2;
+  if(ctx.roundRect){ ctx.beginPath(); ctx.roundRect(x, 8, w, 48, 24); ctx.fill(); }
+  else ctx.fillRect(x, 8, w, 48);
+  ctx.fillStyle = '#d6336c';
+  ctx.fillText(text, 128, 33);
+  const tex = new THREE.CanvasTexture(canvas);
+  if('colorSpace' in tex && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+  sprite.scale.set(3.2, 0.8, 1);
+  sprite.position.y = 3.0;
+  return sprite;
+}
 
 function buildDog(bodyColor, bellyColor, collarColor){
   const dog = new THREE.Group();
@@ -428,14 +466,22 @@ function init(){
   player.position.z += 4;
   scene.add(player);
 
-  // AI dogs
+  // AI dogs — friendly puppies with names & personalities
+  const shuffledNames = DOG_NAMES.slice().sort(()=>Math.random()-0.5);
   for(let i=0;i<NUM_AI_DOGS;i++){
     const c = DOG_COLORS[(i+1)%DOG_COLORS.length];
     const d = buildDog(c.body, c.belly, [0x66bb6a,0x42a5f5,0xffa726,0xab47bc][i%4]);
     const p = randPos(10); d.position.set(p.x,0,p.z);
+    d.userData.name = shuffledNames[i % shuffledNames.length];
+    d.userData.personality = PERSONALITIES[i % PERSONALITIES.length];
     d.userData.target = randPos(10);
     d.userData.speed = rand(4,7);
     d.userData.wait = 0;
+    d.userData.aiState = 'wander';   // wander | approach | play | flee
+    d.userData.barkCooldown = rand(1,4);
+    d.userData.hop = 0;
+    const tag = makeNameTag(d.userData.name);
+    if(tag){ d.add(tag); d.userData.tag = tag; }
     scene.add(d); aiDogs.push(d);
   }
 
@@ -464,7 +510,8 @@ function spawnBones(){
   // remove existing
   for(const b of bones){ scene.remove(b); }
   bones.length = 0;
-  for(let i=0;i<NUM_BONES;i++){
+  boneTarget = bonesForLevel(level);
+  for(let i=0;i<boneTarget;i++){
     const b = buildBone();
     const p = randPos(10); b.position.set(p.x, 1.2, p.z);
     b.userData.spin = rand(0.5,1.5);
@@ -567,9 +614,11 @@ function playerJump(){
 //  HUD + banners
 // =========================================================================
 function updateHUD(){
-  document.getElementById('boneText').textContent = bonesCollected + ' / ' + NUM_BONES;
+  document.getElementById('boneText').textContent = bonesCollected + ' / ' + boneTarget;
   document.getElementById('catText').textContent = catsCollected;
   document.getElementById('scoreText').textContent = score;
+  const lv = document.getElementById('levelText');
+  if(lv) lv.textContent = level;
   saveBest();
   const bt = document.getElementById('bestText');
   if(bt) bt.textContent = bestScore;
@@ -644,15 +693,16 @@ function updatePlayer(dt){
   const mag = Math.hypot(ix, iy);
   const moving = mag > 0.12;
 
-  // camera-relative movement: forward is where camera looks (xz)
+  // Camera-relative movement using the SMOOTHED camera yaw (camYaw), not the
+  // dog's instantaneous facing. This avoids a feedback wobble (dog turns ->
+  // camera turns -> forward changes -> dog turns...) and gives a stable,
+  // "push up = run that way" feel that converges to a straight line.
   if(moving){
-    // camera forward on ground
-    camera.getWorldDirection(tmpV);
-    tmpV.y = 0; tmpV.normalize();
-    const right = new THREE.Vector3().crossVectors(tmpV, new THREE.Vector3(0,1,0)).normalize();
+    const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));      // camera forward
+    const right = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));   // camera right
     const moveDir = new THREE.Vector3();
-    moveDir.addScaledVector(tmpV, -iy);   // push up = forward
-    moveDir.addScaledVector(right, ix);
+    moveDir.addScaledVector(fwd, -iy);   // push up = forward
+    moveDir.addScaledVector(right, ix);  // push right = strafe right
     moveDir.y = 0;
     if(moveDir.lengthSq() > 0.0001){
       moveDir.normalize();
@@ -705,24 +755,86 @@ function animateDogLegs(dog, moving, dt){
   }
 }
 
+const DETECT_RADIUS = 20;   // how far a dog notices the player
+const PLAY_RADIUS   = 4.5;  // how close before it starts playing
+
 function updateAIDogs(dt, t){
   for(const d of aiDogs){
+    const u = d.userData;
     let moving = true;
-    if(d.userData.wait>0){ d.userData.wait-=dt; moving=false; }
-    else {
-      tmpV.copy(d.userData.target).sub(d.position); tmpV.y=0;
-      const dist = tmpV.length();
-      if(dist < 1.5){
-        d.userData.target = randPos(10);
-        if(Math.random()<0.4) d.userData.wait = rand(0.5,2);
-      } else {
-        tmpV.normalize();
-        d.position.addScaledVector(tmpV, d.userData.speed*dt);
-        d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x,tmpV.z), 0.15);
+    let wagSpeed = 10;
+
+    // distance to the player (on the ground)
+    tmpV.copy(player.position).sub(d.position); tmpV.y = 0;
+    const distToPlayer = tmpV.length();
+
+    // decide state from personality + distance
+    if(u.personality === 'shy'){
+      u.aiState = (distToPlayer < DETECT_RADIUS*0.6) ? 'flee' : 'wander';
+    } else {
+      if(distToPlayer < PLAY_RADIUS) u.aiState = 'play';
+      else if(distToPlayer < DETECT_RADIUS) u.aiState = 'approach';
+      else u.aiState = 'wander';
+    }
+
+    if(u.aiState === 'approach'){
+      // run happily toward the player
+      tmpV.normalize();
+      d.position.addScaledVector(tmpV, (u.speed + 2) * dt);
+      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x, tmpV.z), 0.2);
+      wagSpeed = 18;
+      maybeBark(u, dt, 0.15);
+    } else if(u.aiState === 'play'){
+      // bounce around the player, facing them, tail going wild
+      u.hop += dt * 9;
+      u.bounce = Math.abs(Math.sin(u.hop)) * 0.6;
+      const orbit = new THREE.Vector3(Math.cos(t*1.5 + u.walkPhase), 0, Math.sin(t*1.5 + u.walkPhase));
+      const want = tmpV.copy(player.position).addScaledVector(orbit, 3.0);
+      const to = want.sub(d.position); to.y = 0;
+      if(to.length() > 0.3){ to.normalize(); d.position.addScaledVector(to, u.speed*dt); }
+      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(player.position.x - d.position.x, player.position.z - d.position.z), 0.25);
+      wagSpeed = 24;
+      maybeBark(u, dt, 0.4);
+    } else if(u.aiState === 'flee'){
+      // shy: trot away from the player
+      tmpV.multiplyScalar(-1).normalize();
+      d.position.addScaledVector(tmpV, (u.speed + 1) * dt);
+      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x, tmpV.z), 0.15);
+      wagSpeed = 6;
+    } else {
+      // wander
+      if(u.wait > 0){ u.wait -= dt; moving = false; }
+      else {
+        tmpV.copy(u.target).sub(d.position); tmpV.y = 0;
+        if(tmpV.length() < 1.5){
+          u.target = randPos(10);
+          if(Math.random() < 0.4) u.wait = rand(0.5, 2);
+        } else {
+          tmpV.normalize();
+          d.position.addScaledVector(tmpV, u.speed*dt);
+          d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x, tmpV.z), 0.15);
+        }
       }
     }
+
+    // keep dogs inside the yard
+    const lim = WORLD - 3;
+    d.position.x = Math.max(-lim, Math.min(lim, d.position.x));
+    d.position.z = Math.max(-lim, Math.min(lim, d.position.z));
+
     animateDogLegs(d, moving, dt);
-    d.userData.tail.rotation.y = Math.sin(t*10 + d.userData.walkPhase)*0.5;
+    // playful hop
+    if(u.aiState === 'play') d.position.y = u.bounce || 0;
+    d.userData.tail.rotation.y = Math.sin(t*wagSpeed + u.walkPhase) * 0.6;
+  }
+}
+
+// Occasional friendly bark (rate-limited per dog so it isn't noisy).
+function maybeBark(u, dt, chancePerSec){
+  u.barkCooldown -= dt;
+  if(u.barkCooldown <= 0 && Math.random() < chancePerSec*dt*60){
+    bark();
+    u.barkCooldown = rand(2.5, 5);
   }
 }
 
@@ -788,11 +900,11 @@ function checkCollect(){
       chime();
       spawnSparkles(tmpV.copy(b.position), 0xffe066, 16);
       updateHUD();
-      if(bonesCollected >= NUM_BONES){
+      if(bonesCollected >= boneTarget){
         needsSleep = true;
         showBanner('🎉 You got ALL the bones!<br>Go sleep in your 🏠 house!', 3.2);
       } else {
-        showBanner('🦴 +10! Yummy!', 1.0);
+        showBanner('🦴 ' + bonesCollected + ' / ' + boneTarget + ' — Yummy!', 1.0);
       }
     }
   }
@@ -826,17 +938,33 @@ function goToSleep(){
   setTimeout(wakeUp, 2800);
 }
 
-// Wake up after sleeping: new round, bones respawn, bonus points.
+// Wake up after sleeping: LEVEL UP, new round, bones respawn, bonus points.
 function wakeUp(){
   if(!sleeping) return;
   sleeping = false;
-  score += 50;
-  spawnBones();
+  level += 1;                       // progress!
+  score += 50 * level;             // bigger reward each level
+  spawnBones();                     // boneTarget grows with level
+  catsCollected = 0;               // kittens scamper home; round them up again
+  for(const cat of cats){ cat.userData.following = false; const p = randPos(12); cat.position.set(p.x,0,p.z); }
   // move player out of house
   player.position.copy(playerHouse.position); player.position.z += 5;
   updateHUD();
-  showBanner('🌞 Good morning!<br>New bones to find! 🦴', 2.6);
+  celebrateLevel(level);
+  showBanner('🌞 LEVEL ' + level + '!<br>Find all ' + boneTarget + ' bones! 🦴', 3.0);
   chime();
+  setTimeout(chime, 250); setTimeout(()=>beep(1568,0.2,'sine',0.18), 500);
+}
+
+// A burst of rainbow confetti over the puppy to celebrate a new level.
+function celebrateLevel(lv){
+  const colors = [0xff7ab6, 0xffd54f, 0x9ad0ff, 0x9be08a, 0xba68c8, 0xff8a65];
+  for(let i=0;i<40;i++){
+    spawnSparkles(
+      tmpV.copy(player.position).add(new THREE.Vector3((Math.random()-0.5)*3, 3.5, (Math.random()-0.5)*3)),
+      colors[i % colors.length], 1
+    );
+  }
 }
 
 function updateSparkles(dt){
@@ -875,9 +1003,12 @@ function updateButterflies(dt, t){
 }
 
 function updateCamera(dt){
-  // third-person follow camera, behind the dog
-  const back = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), player.rotation.y);
-  camPos.copy(player.position).addScaledVector(back, -10).add(new THREE.Vector3(0, 7, 0));
+  // Smoothly turn the camera yaw to trail the dog's heading. Movement is based
+  // on camYaw (see updatePlayer), so this lag is what keeps steering stable.
+  camYaw = lerpAngle(camYaw, player.rotation.y, 1 - Math.pow(0.02, dt));
+  // third-person follow camera sitting behind the dog
+  const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));
+  camPos.copy(player.position).addScaledVector(fwd, -10).add(new THREE.Vector3(0, 7, 0));
   camera.position.lerp(camPos, 1 - Math.pow(0.001, dt));
   camTarget.copy(player.position).add(new THREE.Vector3(0, 2, 0));
   camera.lookAt(camTarget);
@@ -934,7 +1065,7 @@ function buildStartScreen(){
     step,
     wakeUp,
     spawnBones,
-    state: () => ({ bonesCollected, catsCollected, score, bestScore, needsSleep, sleeping, started }),
+    state: () => ({ bonesCollected, catsCollected, score, bestScore, level, boneTarget, needsSleep, sleeping, started }),
     refs:  () => ({ scene, camera, player, playerHouse, bones, cats, aiDogs, houses, sparkles, butterflies }),
     setInput: (x, y) => { input.x = x; input.y = y; input.active = !!(x || y); },
     setColor: (i) => { chosenColor = i; },

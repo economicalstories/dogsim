@@ -39,6 +39,12 @@
     padding: 8px 16px; font-size: 18px; font-weight: bold; color: #e08a00;
     box-shadow: 0 4px 0 rgba(0,0,0,0.12);
   }
+  #levelBox {
+    position: absolute; top: calc(max(14px, env(safe-area-inset-top)) + 50px); right: 14px;
+    background: rgba(255,255,255,0.85); border: 4px solid #c8a8ff; border-radius: 22px;
+    padding: 6px 14px; font-size: 18px; font-weight: bold; color: #7e3ff2;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.12);
+  }
 
   /* ---------- Big banner message ---------- */
   #banner {
@@ -105,6 +111,7 @@
     <div id="boneCounter">🦴 <span id="boneText">0 / 0</span></div>
     <div id="catCounter">🐱 <span id="catText">0</span></div>
     <div id="scoreBox">⭐ <span id="scoreText">0</span><span style="font-size:13px;color:#a36a00;">&nbsp; 🏆 <span id="bestText">0</span></span></div>
+    <div id="levelBox">🌟 Level <span id="levelText">1</span></div>
     <div id="banner"></div>
   </div>
 
