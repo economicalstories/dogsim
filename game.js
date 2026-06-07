@@ -1105,9 +1105,23 @@ function buildStartScreen(){
     document.getElementById('playBtn').classList.add('hidden');
     document.getElementById('loading').classList.remove('hidden');
     setTimeout(()=>{
-      document.getElementById('start').classList.add('hidden');
-      init();
-      showBanner('🐾 Go collect all the bones! 🦴', 2.6);
+      try {
+        document.getElementById('start').classList.add('hidden');
+        init();
+        showBanner('🐾 Go collect all the bones! 🦴', 2.6);
+      } catch(err){
+        // Surface failures (e.g. no WebGL) instead of a blank/dead screen.
+        started = false;
+        const start = document.getElementById('start');
+        start.classList.remove('hidden');
+        document.getElementById('playBtn').classList.remove('hidden');
+        const loading = document.getElementById('loading');
+        loading.classList.remove('hidden');
+        loading.classList.add('error');
+        loading.textContent = '😢 Could not start the game: ' + (err && err.message ? err.message : err) +
+          '. Try a different browser, or make sure 3D/WebGL is enabled.';
+        if(typeof console !== 'undefined') console.error('Puppy World failed to start:', err);
+      }
     }, 60);
   });
 }

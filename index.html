@@ -82,24 +82,28 @@
   #jumpBtn { right: 124px; bottom: calc(max(28px, env(safe-area-inset-bottom)) + 16px); background: #9be08a; width: 74px; height: 74px; font-size: 32px; }
 
   /* ---------- Start screen ---------- */
+  /* Scrollable + size-capped so it fits (and PLAY stays reachable) on a wide,
+     short desktop window as well as a tall phone. */
   #start {
     position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
     background: linear-gradient(180deg, #8fd6ff 0%, #b8eaff 50%, #c8f5b8 100%);
-    padding: 20px;
+    padding: 16px; overflow-y: auto;
   }
-  #start h1 { font-size: 13vw; color: #fff; text-shadow: 0 4px 0 #ff8ac2, 0 8px 14px rgba(0,0,0,0.2); margin-bottom: 6px; }
-  #start p { font-size: 5vw; color: #d6336c; background: rgba(255,255,255,0.7); padding: 8px 18px; border-radius: 18px; margin: 6px; max-width: 90vw; }
-  #dogPick { display: flex; gap: 14px; margin: 18px 0; flex-wrap: wrap; justify-content: center; }
-  .dogSwatch { width: 56px; height: 56px; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.15); cursor: pointer; }
+  #start > * { flex-shrink: 0; }
+  #start h1 { font-size: clamp(36px, 12vw, 64px); color: #fff; text-shadow: 0 4px 0 #ff8ac2, 0 8px 14px rgba(0,0,0,0.2); margin-bottom: 4px; line-height: 1.05; }
+  #start p { font-size: clamp(15px, 4.2vw, 21px); color: #d6336c; background: rgba(255,255,255,0.7); padding: 7px 16px; border-radius: 18px; margin: 5px; max-width: min(90vw, 640px); }
+  #dogPick { display: flex; gap: 12px; margin: 12px 0; flex-wrap: wrap; justify-content: center; }
+  .dogSwatch { width: clamp(44px, 12vw, 56px); height: clamp(44px, 12vw, 56px); border-radius: 50%; border: 5px solid #fff; box-shadow: 0 4px 0 rgba(0,0,0,0.15); cursor: pointer; }
   .dogSwatch.sel { border-color: #ffd000; transform: scale(1.15); }
   #playBtn {
-    margin-top: 10px; font-size: 8vw; font-weight: bold; color: #fff; background: #ff7ab6;
-    border: 6px solid #fff; border-radius: 40px; padding: 14px 50px; cursor: pointer;
+    margin-top: 8px; font-size: clamp(26px, 7vw, 38px); font-weight: bold; color: #fff; background: #ff7ab6;
+    border: 6px solid #fff; border-radius: 40px; padding: 12px 46px; cursor: pointer;
     box-shadow: 0 8px 0 #d6337c; transition: transform .08s;
   }
   #playBtn:active { transform: translateY(5px); box-shadow: 0 3px 0 #d6337c; }
-  #loading { color: #fff; font-size: 5vw; }
+  #loading { color: #fff; font-size: clamp(16px, 4.5vw, 22px); max-width: 90vw; }
+  #loading.error { color: #b00020; background: rgba(255,255,255,0.92); padding: 12px 18px; border-radius: 14px; font-size: clamp(13px, 3.4vw, 16px); }
 
   .hidden { display: none !important; }
 </style>
