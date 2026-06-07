@@ -13,7 +13,7 @@ export function createGame(THREE){
    ========================================================================= */
 
 // Bump this every deploy so you can tell when the page has refreshed to new code.
-const VERSION = 'v9 · 2026-06-07';
+const VERSION = 'v10 · 2026-06-07';
 
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
@@ -1108,7 +1108,9 @@ function lerpAngle(a,b,t){
 // =========================================================================
 function buildStartScreen(){
   const ver = document.getElementById('version');
-  if(ver) ver.textContent = 'Puppy World ' + VERSION;
+  if(ver) ver.textContent = VERSION;
+  const sver = document.getElementById('startVersion');
+  if(sver) sver.textContent = 'Version ' + VERSION;
   if(typeof console !== 'undefined') console.log('🐕 Puppy World ' + VERSION);
   const bestStart = document.getElementById('bestStart');
   if(bestStart) bestStart.textContent = bestScore > 0 ? ('🏆 Best score: ' + bestScore) : '';
