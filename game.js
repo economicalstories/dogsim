@@ -13,7 +13,7 @@ export function createGame(THREE){
    ========================================================================= */
 
 // Bump this every deploy so you can tell when the page has refreshed to new code.
-const VERSION = 'v8 · 2026-06-07';
+const VERSION = 'v9 · 2026-06-07';
 
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
@@ -629,6 +629,25 @@ function setupControls(){
 
 let playerVelY = 0;
 let playerY = 0;
+
+// ---- Dog-like steering feel (tuned for a young child: stable & forgiving) ----
+const MAX_SPEED = 10;        // top running speed (units/sec)
+const TURN_RATE = 3.4;       // how fast the puppy can turn (rad/sec) — smooth, not instant
+const ACCEL = 24;            // how quickly it speeds up
+const BRAKE = 32;            // how quickly it slows to a stop when you let go
+const STEER_DEADZONE = 0.22; // ignore tiny stick movements so it doesn't twitch
+let playerSpeed = 0;         // current forward speed, eased toward target
+let targetSpeed = 0;
+
+// Rotate `cur` toward `target` by at most `maxStep` radians (shortest way).
+function turnToward(cur, target, maxStep){
+  let d = target - cur;
+  while(d > Math.PI) d -= Math.PI*2;
+  while(d < -Math.PI) d += Math.PI*2;
+  if(Math.abs(d) <= maxStep) return target;
+  return cur + Math.sign(d) * maxStep;
+}
+
 function playerJump(){
   if(playerY <= 0.01){ playerVelY = 9; bark(); }
 }
@@ -707,35 +726,38 @@ function step(dt){
 }
 
 function updatePlayer(dt){
-  // direction from joystick relative to camera facing
+  // Read joystick / keyboard
   let ix = input.x, iy = input.y;
   if(keys['arrowup']||keys['w']) iy = -1;
   if(keys['arrowdown']||keys['s']) iy = 1;
   if(keys['arrowleft']||keys['a']) ix = -1;
   if(keys['arrowright']||keys['d']) ix = 1;
 
-  const mag = Math.hypot(ix, iy);
-  const moving = mag > 0.12;
+  // Dog-like steering: the stick chooses a HEADING (relative to the camera),
+  // and the puppy turns toward it at a limited rate so it leans into the turn
+  // like a real dog instead of snapping around. Speed eases in and out, and a
+  // deadzone stops tiny stick wiggles from twitching the steering.
+  let mag = Math.hypot(ix, iy);
+  if(mag > 1){ ix /= mag; iy /= mag; mag = 1; }
 
-  // Camera-relative movement using the SMOOTHED camera yaw (camYaw), not the
-  // dog's instantaneous facing. This avoids a feedback wobble (dog turns ->
-  // camera turns -> forward changes -> dog turns...) and gives a stable,
-  // "push up = run that way" feel that converges to a straight line.
-  if(moving){
-    const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));       // camera forward
-    const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));    // camera right = cross(fwd, up)
-    const moveDir = new THREE.Vector3();
-    moveDir.addScaledVector(fwd, -iy);   // push up = forward
-    moveDir.addScaledVector(right, ix);  // push right = strafe right
-    moveDir.y = 0;
-    if(moveDir.lengthSq() > 0.0001){
-      moveDir.normalize();
-      const speed = 11 * Math.min(mag,1);
-      player.position.addScaledVector(moveDir, speed*dt);
-      // face movement
-      const targetRot = Math.atan2(moveDir.x, moveDir.z);
-      player.rotation.y = lerpAngle(player.rotation.y, targetRot, 0.2);
-    }
+  if(mag > STEER_DEADZONE){
+    // up = run forward (camera direction); right = camera-right; etc.
+    const desiredHeading = camYaw + Math.atan2(-ix, -iy);
+    player.rotation.y = turnToward(player.rotation.y, desiredHeading, TURN_RATE * dt);
+    targetSpeed = MAX_SPEED * Math.min((mag - STEER_DEADZONE) / (1 - STEER_DEADZONE), 1);
+  } else {
+    targetSpeed = 0;   // let go -> coast to a gentle stop, keep facing the same way
+  }
+
+  // ease current speed toward the target (accelerate / brake)
+  const rate = (targetSpeed > playerSpeed ? ACCEL : BRAKE) * dt;
+  playerSpeed += Math.max(-rate, Math.min(rate, targetSpeed - playerSpeed));
+  const moving = playerSpeed > 0.4;
+
+  // move in the direction the puppy is actually facing
+  if(playerSpeed > 0.001){
+    player.position.x += Math.sin(player.rotation.y) * playerSpeed * dt;
+    player.position.z += Math.cos(player.rotation.y) * playerSpeed * dt;
   }
 
   // bounds

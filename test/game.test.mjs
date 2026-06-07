@@ -153,7 +153,7 @@ test('friendly dogs form a ring and never crowd/overlap the player', () => {
   }
 });
 
-test('strafing right moves the puppy to the camera-right (not inverted)', () => {
+test('steering right turns the puppy toward camera-right (not inverted)', () => {
   const r = game.refs();
   r.player.position.set(0, 0, 0);
   game.setInput(0, 0);
@@ -163,11 +163,26 @@ test('strafing right moves the puppy to the camera-right (not inverted)', () => 
   const fwd = { x: r.player.position.x - r.camera.position.x, z: r.player.position.z - r.camera.position.z };
   const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
   const camRight = { x: -fwd.z, z: fwd.x }; // cross(fwd, up)
-  game.setInput(1, 0); // push joystick right
-  run(game, 8);
+  game.setInput(1, 0); // hold joystick right
+  run(game, 50);       // dog leans into the turn and runs that way
   const dx = r.player.position.x - start.x, dz = r.player.position.z - start.z;
   const dot = dx * camRight.x + dz * camRight.z;
-  assert.ok(dot > 0, 'puppy moved to camera-right, not the wrong way (dot=' + dot.toFixed(2) + ')');
+  assert.ok(dot > 0, 'puppy went to camera-right, not the wrong way (dot=' + dot.toFixed(2) + ')');
+  game.setInput(0, 0);
+});
+
+test('steering is smooth: a tiny stick wiggle barely turns the puppy', () => {
+  const r = game.refs();
+  r.player.position.set(0, 0, 0);
+  game.setInput(0, -1); // settle running straight forward
+  run(game, 40);
+  const before = r.player.rotation.y;
+  // a tiny nudge inside the deadzone should NOT swing the heading around
+  game.setInput(0.1, -0.02);
+  run(game, 1);
+  let d = Math.abs(r.player.rotation.y - before);
+  while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
+  assert.ok(d < 0.05, 'heading barely moved from a tiny wiggle (' + d.toFixed(3) + ' rad)');
   game.setInput(0, 0);
 });
 
