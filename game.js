@@ -13,7 +13,7 @@ export function createGame(THREE){
    ========================================================================= */
 
 // Bump this every deploy so you can tell when the page has refreshed to new code.
-const VERSION = 'v11 · 2026-06-07';
+const VERSION = 'v12 · 2026-06-07';
 
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
@@ -630,24 +630,23 @@ function setupControls(){
 let playerVelY = 0;
 let playerY = 0;
 
-// ---- Dog-like steering feel (tuned calm & forgiving for a young child) ----
-const MAX_SPEED = 6.5;       // top running speed (units/sec) — gentle, easy to control
-const TURN_RATE = 2.3;       // how fast the puppy can turn (rad/sec) — smooth, not snappy
-const ACCEL = 16;            // how quickly it speeds up
-const BRAKE = 26;            // how quickly it slows to a stop when you let go
-const STEER_DEADZONE = 0.30; // ignore small stick movements so it doesn't twitch
-const INPUT_SMOOTH = 7;      // low-pass the stick (per-sec); higher = snappier, lower = calmer
-let playerSpeed = 0;         // current forward speed, eased toward target
+// ---- "Drive" steering feel (easiest & most stable for a young child) ----
+//   Push up/down = go forward / back.   Push left/right = gently steer.
+const MAX_SPEED = 6.5;        // top forward speed (units/sec)
+const REVERSE_SPEED = 3;      // slow backing-up speed
+const TURN_RATE = 2.0;        // steering rate at full left/right (rad/sec) — gentle
+const ACCEL = 16;             // how quickly it speeds up
+const BRAKE = 26;             // how quickly it slows when you ease off
+const STEER_DEADZONE = 0.25;  // ignore small stick movements so it doesn't twitch
+const INPUT_SMOOTH = 7;       // low-pass the stick (per-sec); higher = snappier, lower = calmer
+let playerSpeed = 0;          // current speed, eased toward target
 let targetSpeed = 0;
 let smoothIX = 0, smoothIY = 0;  // filtered joystick, removes jitter / wandering
 
-// Rotate `cur` toward `target` by at most `maxStep` radians (shortest way).
-function turnToward(cur, target, maxStep){
-  let d = target - cur;
-  while(d > Math.PI) d -= Math.PI*2;
-  while(d < -Math.PI) d += Math.PI*2;
-  if(Math.abs(d) <= maxStep) return target;
-  return cur + Math.sign(d) * maxStep;
+// Soft deadzone: returns 0 inside the zone, then ramps smoothly from 0..1.
+function applyDeadzone(v, dz){
+  if(Math.abs(v) < dz) return 0;
+  return (v - Math.sign(v) * dz) / (1 - dz);
 }
 
 function playerJump(){
@@ -741,29 +740,24 @@ function updatePlayer(dt){
   smoothIY += (iy - smoothIY) * k;
   ix = smoothIX; iy = smoothIY;
 
-  // Dog-like steering: the (smoothed) stick chooses a HEADING relative to the
-  // camera, and the puppy turns toward it at a limited rate so it leans into
-  // the turn like a real dog instead of snapping. Speed eases in and out, and a
-  // deadzone stops small stick movements from twitching the steering.
-  let mag = Math.hypot(ix, iy);
-  if(mag > 1){ ix /= mag; iy /= mag; mag = 1; }
+  // DRIVE controls (easiest for a young child):
+  //   up/down  -> drive forward / back along the way the puppy is facing
+  //   left/right -> gently steer (turn) left or right
+  const fwdInput  = applyDeadzone(-iy, STEER_DEADZONE);   // push up => forward
+  const turnInput = applyDeadzone(ix,  STEER_DEADZONE);   // push right => turn right
 
-  if(mag > STEER_DEADZONE){
-    // up = run forward (camera direction); right = camera-right; etc.
-    const desiredHeading = camYaw + Math.atan2(-ix, -iy);
-    player.rotation.y = turnToward(player.rotation.y, desiredHeading, TURN_RATE * dt);
-    targetSpeed = MAX_SPEED * Math.min((mag - STEER_DEADZONE) / (1 - STEER_DEADZONE), 1);
-  } else {
-    targetSpeed = 0;   // let go -> coast to a gentle stop, keep facing the same way
-  }
+  // steer: turning is a little gentler at a standstill so it can't spin wildly
+  const turnScale = 0.5 + 0.5 * Math.min(Math.abs(playerSpeed) / MAX_SPEED, 1);
+  player.rotation.y -= turnInput * TURN_RATE * turnScale * dt;
 
-  // ease current speed toward the target (accelerate / brake)
-  const rate = (targetSpeed > playerSpeed ? ACCEL : BRAKE) * dt;
+  // speed eases toward the target (forward, or slow reverse)
+  targetSpeed = fwdInput >= 0 ? MAX_SPEED * fwdInput : REVERSE_SPEED * fwdInput;
+  const rate = (Math.abs(targetSpeed) > Math.abs(playerSpeed) ? ACCEL : BRAKE) * dt;
   playerSpeed += Math.max(-rate, Math.min(rate, targetSpeed - playerSpeed));
-  const moving = playerSpeed > 0.4;
+  const moving = Math.abs(playerSpeed) > 0.4;
 
   // move in the direction the puppy is actually facing
-  if(playerSpeed > 0.001){
+  if(Math.abs(playerSpeed) > 0.001){
     player.position.x += Math.sin(player.rotation.y) * playerSpeed * dt;
     player.position.z += Math.cos(player.rotation.y) * playerSpeed * dt;
   }

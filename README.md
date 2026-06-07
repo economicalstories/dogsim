@@ -5,8 +5,10 @@ designed to be played on a phone or tablet. 🐾
 
 ## 🎮 How to play
 
-- **Move:** touch and drag anywhere on the **left side** of the screen — a joystick
-  appears under your finger and your puppy runs that way.
+- **Move (drive controls):** touch and drag anywhere on the **left side** of the
+  screen — a joystick appears under your finger. **Push up to run forward, down to
+  back up, and left/right to gently steer.** The steering is smoothed and gentle so
+  it's easy for little hands.
 - **Jump:** tap the green ⬆️ button.
 - **Bark:** tap the yellow 🐶 button.
 - **Collect all the 🦴 bones** scattered around the world. A **floating arrow above
