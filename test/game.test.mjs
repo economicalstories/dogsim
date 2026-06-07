@@ -100,15 +100,71 @@ test('sleeping LEVELS UP, respawns bones, and grows the goal', () => {
 
 test('touching a kitten makes it follow you', () => {
   const r = game.refs();
-  const cat = r.cats.find(c => !c.userData.following);
-  assert.ok(cat, 'a free kitten exists');
+  // park every other kitten far away so exactly one is in range
+  for (const c of r.cats) { c.userData.following = false; c.position.set(500, 0, 500); }
+  const cat = r.cats[0];
   const before = game.state().catsCollected;
-  cat.userData.following = false;
   cat.position.copy(r.player.position);
   cat.position.x += 1.0; // within the 2.2 collect radius
   game.step(0.016);
   assert.strictEqual(cat.userData.following, true, 'kitten now following');
-  assert.strictEqual(game.state().catsCollected, before + 1, 'cat counter up');
+  assert.strictEqual(game.state().catsCollected, before + 1, 'cat counter up by exactly 1');
+});
+
+test('a helper arrow points toward the nearest bone (or the house at bedtime)', () => {
+  const r = game.refs();
+  r.player.position.set(0, 0, 0);
+  game.setInput(0, 0);
+  game.step(0.016);
+  assert.ok(r.pointer, 'pointer exists');
+  assert.strictEqual(r.pointer.visible, true, 'pointer is visible');
+  // figure out what it SHOULD point at, given current state
+  let target;
+  if (game.state().needsSleep) {
+    target = r.playerHouse.position;
+  } else {
+    let best = Infinity;
+    for (const b of r.bones) {
+      if (b.userData.collected) continue;
+      const d = Math.hypot(b.position.x, b.position.z);
+      if (d < best) { best = d; target = b.position; }
+    }
+  }
+  const expected = Math.atan2(target.x, target.z);
+  assert.ok(Math.abs(r.pointer.rotation.y - expected) < 1e-6, 'arrow aims at the target');
+});
+
+test('friendly dogs form a ring and never crowd/overlap the player', () => {
+  const r = game.refs();
+  r.player.position.set(0, 0, 0);
+  game.setInput(0, 0);
+  // drop a couple of dogs right on top of the player to test the bubble
+  r.aiDogs[0].position.set(0.2, 0, 0);
+  r.aiDogs[1].position.set(-0.1, 0, 0.1);
+  run(game, 120);
+  const gap = game.config.MIN_PLAYER_GAP - 0.1;
+  for (const d of r.aiDogs) {
+    const dist = Math.hypot(d.position.x - r.player.position.x, d.position.z - r.player.position.z);
+    assert.ok(dist >= gap, `${d.userData.name} kept its distance (${dist.toFixed(2)})`);
+  }
+});
+
+test('strafing right moves the puppy to the camera-right (not inverted)', () => {
+  const r = game.refs();
+  r.player.position.set(0, 0, 0);
+  game.setInput(0, 0);
+  run(game, 25); // let the camera settle behind the puppy
+  const start = r.player.position.clone();
+  // camera forward (horizontal) = from camera toward the puppy
+  const fwd = { x: r.player.position.x - r.camera.position.x, z: r.player.position.z - r.camera.position.z };
+  const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
+  const camRight = { x: -fwd.z, z: fwd.x }; // cross(fwd, up)
+  game.setInput(1, 0); // push joystick right
+  run(game, 8);
+  const dx = r.player.position.x - start.x, dz = r.player.position.z - start.z;
+  const dot = dx * camRight.x + dz * camRight.z;
+  assert.ok(dot > 0, 'puppy moved to camera-right, not the wrong way (dot=' + dot.toFixed(2) + ')');
+  game.setInput(0, 0);
 });
 
 test('joystick input moves the puppy and bounds keep it in the yard', () => {

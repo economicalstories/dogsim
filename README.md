@@ -9,7 +9,9 @@ designed to be played on a phone or tablet. 🐾
   appears under your finger and your puppy runs that way.
 - **Jump:** tap the green ⬆️ button.
 - **Bark:** tap the yellow 🐶 button.
-- **Collect all the 🦴 bones** scattered around the world.
+- **Collect all the 🦴 bones** scattered around the world. A **floating arrow above
+  your puppy points to the nearest bone**, and each bone has a glowing beacon, so
+  they're easy to find.
 - **Find 🐱 kittens** — touch one and it joins your puppy and follows you in a line! 💕
 - When you've collected **all the bones**, a pink arrow points to your **🏠 house** —
   run home to **go to sleep**. 😴
