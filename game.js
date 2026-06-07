@@ -13,7 +13,7 @@ export function createGame(THREE){
    ========================================================================= */
 
 // Bump this every deploy so you can tell when the page has refreshed to new code.
-const VERSION = 'v10 · 2026-06-07';
+const VERSION = 'v11 · 2026-06-07';
 
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
@@ -630,14 +630,16 @@ function setupControls(){
 let playerVelY = 0;
 let playerY = 0;
 
-// ---- Dog-like steering feel (tuned for a young child: stable & forgiving) ----
-const MAX_SPEED = 10;        // top running speed (units/sec)
-const TURN_RATE = 3.4;       // how fast the puppy can turn (rad/sec) — smooth, not instant
-const ACCEL = 24;            // how quickly it speeds up
-const BRAKE = 32;            // how quickly it slows to a stop when you let go
-const STEER_DEADZONE = 0.22; // ignore tiny stick movements so it doesn't twitch
+// ---- Dog-like steering feel (tuned calm & forgiving for a young child) ----
+const MAX_SPEED = 6.5;       // top running speed (units/sec) — gentle, easy to control
+const TURN_RATE = 2.3;       // how fast the puppy can turn (rad/sec) — smooth, not snappy
+const ACCEL = 16;            // how quickly it speeds up
+const BRAKE = 26;            // how quickly it slows to a stop when you let go
+const STEER_DEADZONE = 0.30; // ignore small stick movements so it doesn't twitch
+const INPUT_SMOOTH = 7;      // low-pass the stick (per-sec); higher = snappier, lower = calmer
 let playerSpeed = 0;         // current forward speed, eased toward target
 let targetSpeed = 0;
+let smoothIX = 0, smoothIY = 0;  // filtered joystick, removes jitter / wandering
 
 // Rotate `cur` toward `target` by at most `maxStep` radians (shortest way).
 function turnToward(cur, target, maxStep){
@@ -733,10 +735,16 @@ function updatePlayer(dt){
   if(keys['arrowleft']||keys['a']) ix = -1;
   if(keys['arrowright']||keys['d']) ix = 1;
 
-  // Dog-like steering: the stick chooses a HEADING (relative to the camera),
-  // and the puppy turns toward it at a limited rate so it leans into the turn
-  // like a real dog instead of snapping around. Speed eases in and out, and a
-  // deadzone stops tiny stick wiggles from twitching the steering.
+  // Low-pass the stick so jitter / tiny wiggles don't make the puppy wander.
+  const k = 1 - Math.exp(-INPUT_SMOOTH * dt);
+  smoothIX += (ix - smoothIX) * k;
+  smoothIY += (iy - smoothIY) * k;
+  ix = smoothIX; iy = smoothIY;
+
+  // Dog-like steering: the (smoothed) stick chooses a HEADING relative to the
+  // camera, and the puppy turns toward it at a limited rate so it leans into
+  // the turn like a real dog instead of snapping. Speed eases in and out, and a
+  // deadzone stops small stick movements from twitching the steering.
   let mag = Math.hypot(ix, iy);
   if(mag > 1){ ix /= mag; iy /= mag; mag = 1; }
 
