@@ -13,11 +13,11 @@ export function createGame(THREE){
    ========================================================================= */
 
 // ---------- Config ----------
-const WORLD = 110;          // half-size of the playable ground
+const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
 const NUM_BONES = 8;
 const NUM_CATS = 5;
 const NUM_AI_DOGS = 7;
-const NUM_TREES = 34;
+const NUM_TREES = 18;
 const NUM_HOUSES = 4;
 
 const DOG_COLORS = [
@@ -39,7 +39,7 @@ const PERSONALITIES = ['playful','bouncy','friendly','friendly','playful','shy',
 let scene, camera, renderer, clock;
 let elapsed = 0;   // total game time, advanced by step(dt); test-friendly
 let camYaw = 0;    // smoothed camera heading; movement is relative to this
-let player, playerHouse;
+let player, playerHouse, pointer;
 const bones = [];
 const cats = [];
 const aiDogs = [];
@@ -248,6 +248,20 @@ function buildBone(){
   return g;
 }
 
+// A floating arrow that hovers over the puppy and points to the nearest bone
+// (or to the house at bedtime) so a little kid can always find where to go.
+function buildPointer(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0x554400, roughness: 0.4 });
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 4), mat);
+  cone.rotation.x = Math.PI/2; cone.position.z = 0.5;     // tip points along +Z
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.8), mat);
+  shaft.position.z = -0.2;
+  g.add(cone, shaft);
+  g.userData.mat = mat;
+  return g;
+}
+
 // =========================================================================
 //  Dog house
 // =========================================================================
@@ -355,7 +369,7 @@ function randPos(margin=8){ return new THREE.Vector3(rand(-WORLD+margin, WORLD-m
 function init(){
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x8fd6ff);
-  scene.fog = new THREE.Fog(0x8fd6ff, 70, 180);
+  scene.fog = new THREE.Fog(0x8fd6ff, 95, 230);
 
   camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 400);
   camera.position.set(0, 8, -10);
@@ -422,7 +436,7 @@ function init(){
     scene.add(t);
   }
   // Flowers
-  for(let i=0;i<120;i++){
+  for(let i=0;i<70;i++){
     const f = buildFlower();
     const p = randPos(4); f.position.set(p.x, 0, p.z);
     f.scale.setScalar(rand(0.7,1.3));
@@ -466,6 +480,10 @@ function init(){
   player.position.z += 4;
   scene.add(player);
 
+  // Helper arrow that points to the nearest bone / the house
+  pointer = buildPointer();
+  scene.add(pointer);
+
   // AI dogs — friendly puppies with names & personalities
   const shuffledNames = DOG_NAMES.slice().sort(()=>Math.random()-0.5);
   for(let i=0;i<NUM_AI_DOGS;i++){
@@ -480,6 +498,8 @@ function init(){
     d.userData.aiState = 'wander';   // wander | approach | play | flee
     d.userData.barkCooldown = rand(1,4);
     d.userData.hop = 0;
+    d.userData.orbitOffset = (i / NUM_AI_DOGS) * Math.PI * 2;  // unique slot in the ring
+    d.userData.orbitRadius = 5.5 + (i % 3) * 1.6;             // spread across a few rings
     const tag = makeNameTag(d.userData.name);
     if(tag){ d.add(tag); d.userData.tag = tag; }
     scene.add(d); aiDogs.push(d);
@@ -666,6 +686,7 @@ function step(dt){
   updateAIDogs(dt, t);
   updateCats(dt, t);
   updateBones(dt, t);
+  updatePointer(dt, t);
   updateSparkles(dt);
   updateClouds(dt);
   updateButterflies(dt, t);
@@ -698,8 +719,8 @@ function updatePlayer(dt){
   // camera turns -> forward changes -> dog turns...) and gives a stable,
   // "push up = run that way" feel that converges to a straight line.
   if(moving){
-    const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));      // camera forward
-    const right = new THREE.Vector3(Math.cos(camYaw), 0, -Math.sin(camYaw));   // camera right
+    const fwd = new THREE.Vector3(Math.sin(camYaw), 0, Math.cos(camYaw));       // camera forward
+    const right = new THREE.Vector3(-Math.cos(camYaw), 0, Math.sin(camYaw));    // camera right = cross(fwd, up)
     const moveDir = new THREE.Vector3();
     moveDir.addScaledVector(fwd, -iy);   // push up = forward
     moveDir.addScaledVector(right, ix);  // push right = strafe right
@@ -755,8 +776,9 @@ function animateDogLegs(dog, moving, dt){
   }
 }
 
-const DETECT_RADIUS = 20;   // how far a dog notices the player
-const PLAY_RADIUS   = 4.5;  // how close before it starts playing
+const DETECT_RADIUS = 22;     // how far a dog notices the player
+const PLAY_RADIUS   = 11;     // close enough to orbit & play around the player
+const MIN_PLAYER_GAP = 3.4;   // dogs never come closer than this (no crowding)
 
 function updateAIDogs(dt, t){
   for(const d of aiDogs){
@@ -777,24 +799,21 @@ function updateAIDogs(dt, t){
       else u.aiState = 'wander';
     }
 
-    if(u.aiState === 'approach'){
-      // run happily toward the player
-      tmpV.normalize();
-      d.position.addScaledVector(tmpV, (u.speed + 2) * dt);
-      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x, tmpV.z), 0.2);
-      wagSpeed = 18;
-      maybeBark(u, dt, 0.15);
-    } else if(u.aiState === 'play'){
-      // bounce around the player, facing them, tail going wild
-      u.hop += dt * 9;
-      u.bounce = Math.abs(Math.sin(u.hop)) * 0.6;
-      const orbit = new THREE.Vector3(Math.cos(t*1.5 + u.walkPhase), 0, Math.sin(t*1.5 + u.walkPhase));
-      const want = tmpV.copy(player.position).addScaledVector(orbit, 3.0);
-      const to = want.sub(d.position); to.y = 0;
-      if(to.length() > 0.3){ to.normalize(); d.position.addScaledVector(to, u.speed*dt); }
-      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(player.position.x - d.position.x, player.position.z - d.position.z), 0.25);
-      wagSpeed = 24;
-      maybeBark(u, dt, 0.4);
+    if(u.aiState === 'approach' || u.aiState === 'play'){
+      // Head to a personal spot in a ring AROUND the player (each dog has its
+      // own slowly-rotating slot), so dogs form a happy circle instead of all
+      // piling onto the player. They face the player and never overlap them.
+      const ang = u.orbitOffset + t * 0.5;
+      const spotX = player.position.x + Math.cos(ang) * u.orbitRadius;
+      const spotZ = player.position.z + Math.sin(ang) * u.orbitRadius;
+      const toX = spotX - d.position.x, toZ = spotZ - d.position.z;
+      const td = Math.hypot(toX, toZ);
+      const sp = (u.aiState === 'approach' ? u.speed + 2 : u.speed) * dt;
+      if(td > 0.15){ const k = Math.min(sp, td) / td; d.position.x += toX * k; d.position.z += toZ * k; }
+      d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(player.position.x - d.position.x, player.position.z - d.position.z), 0.2);
+      if(u.aiState === 'play'){ u.hop += dt * 9; u.bounce = Math.abs(Math.sin(u.hop)) * 0.5; wagSpeed = 24; }
+      else wagSpeed = 18;
+      maybeBark(u, dt, u.aiState === 'play' ? 0.25 : 0.12);
     } else if(u.aiState === 'flee'){
       // shy: trot away from the player
       tmpV.multiplyScalar(-1).normalize();
@@ -815,6 +834,15 @@ function updateAIDogs(dt, t){
           d.rotation.y = lerpAngle(d.rotation.y, Math.atan2(tmpV.x, tmpV.z), 0.15);
         }
       }
+    }
+
+    // Never crowd or overlap the player — keep a friendly personal bubble.
+    const dx = d.position.x - player.position.x, dz = d.position.z - player.position.z;
+    const sd = Math.hypot(dx, dz);
+    if(sd < MIN_PLAYER_GAP){
+      const ux = sd > 0.001 ? dx/sd : 1, uz = sd > 0.001 ? dz/sd : 0;
+      d.position.x = player.position.x + ux * MIN_PLAYER_GAP;
+      d.position.z = player.position.z + uz * MIN_PLAYER_GAP;
     }
 
     // keep dogs inside the yard
@@ -885,6 +913,33 @@ function updateBones(dt, t){
     b.position.y = 1.2 + Math.sin(t*3 + b.userData.bob)*0.2;
     if(b.userData.beam) b.userData.beam.material.opacity = 0.22 + Math.sin(t*4 + b.userData.bob)*0.12;
     if(b.userData.ring) b.userData.ring.scale.setScalar(1 + Math.sin(t*4 + b.userData.bob)*0.12);
+  }
+}
+
+// Aim the floating helper arrow at the nearest uncollected bone, or at the
+// house once all bones are found. Hidden while sleeping.
+function updatePointer(dt, t){
+  if(!pointer) return;
+  if(sleeping){ pointer.visible = false; return; }
+  let target = null, toHouse = false;
+  if(needsSleep){ target = playerHouse.position; toHouse = true; }
+  else {
+    let best = Infinity;
+    for(const b of bones){
+      if(b.userData.collected) continue;
+      const dxz = Math.hypot(b.position.x - player.position.x, b.position.z - player.position.z);
+      if(dxz < best){ best = dxz; target = b.position; }
+    }
+  }
+  if(!target){ pointer.visible = false; return; }
+  pointer.visible = true;
+  pointer.position.set(player.position.x, player.position.y + 3.6 + Math.sin(t*3)*0.15, player.position.z);
+  pointer.rotation.y = Math.atan2(target.x - player.position.x, target.z - player.position.z);
+  // recolor (guarded so headless tests with stubbed materials don't choke)
+  const mat = pointer.userData.mat;
+  if(mat && mat.color && mat.color.set){
+    mat.color.set(toHouse ? 0xff4081 : 0xffe066);
+    if(mat.emissive && mat.emissive.set) mat.emissive.set(toHouse ? 0x551122 : 0x554400);
   }
 }
 
@@ -1066,9 +1121,9 @@ function buildStartScreen(){
     wakeUp,
     spawnBones,
     state: () => ({ bonesCollected, catsCollected, score, bestScore, level, boneTarget, needsSleep, sleeping, started }),
-    refs:  () => ({ scene, camera, player, playerHouse, bones, cats, aiDogs, houses, sparkles, butterflies }),
+    refs:  () => ({ scene, camera, player, playerHouse, pointer, bones, cats, aiDogs, houses, sparkles, butterflies }),
     setInput: (x, y) => { input.x = x; input.y = y; input.active = !!(x || y); },
     setColor: (i) => { chosenColor = i; },
-    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD },
+    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD, MIN_PLAYER_GAP },
   };
 }
