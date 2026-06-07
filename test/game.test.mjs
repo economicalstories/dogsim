@@ -153,33 +153,42 @@ test('friendly dogs form a ring and never crowd/overlap the player', () => {
   }
 });
 
-test('steering right turns the puppy toward camera-right (not inverted)', () => {
+test('drive controls: push up drives forward, down does not zoom away', () => {
   const r = game.refs();
   r.player.position.set(0, 0, 0);
-  game.setInput(0, 0);
-  run(game, 25); // let the camera settle behind the puppy
+  r.player.rotation.y = 0;              // facing +Z
+  game.setInput(0, 0); run(game, 12);
   const start = r.player.position.clone();
-  // camera forward (horizontal) = from camera toward the puppy
-  const fwd = { x: r.player.position.x - r.camera.position.x, z: r.player.position.z - r.camera.position.z };
-  const fl = Math.hypot(fwd.x, fwd.z); fwd.x /= fl; fwd.z /= fl;
-  const camRight = { x: -fwd.z, z: fwd.x }; // cross(fwd, up)
-  game.setInput(1, 0); // hold joystick right
-  run(game, 50);       // dog leans into the turn and runs that way
-  const dx = r.player.position.x - start.x, dz = r.player.position.z - start.z;
-  const dot = dx * camRight.x + dz * camRight.z;
-  assert.ok(dot > 0, 'puppy went to camera-right, not the wrong way (dot=' + dot.toFixed(2) + ')');
+  game.setInput(0, -1);                 // push up = forward
+  run(game, 60);
+  assert.ok(r.player.position.z - start.z > 3, 'drove forward (+Z) when pushing up');
+  game.setInput(0, 0);
+});
+
+test('drive controls: right steers right, left steers left (not inverted)', () => {
+  const r = game.refs();
+  // push forward + right -> turns clockwise (heading decreases)
+  r.player.position.set(0, 0, 0); r.player.rotation.y = 0;
+  game.setInput(0, 0); run(game, 12);
+  game.setInput(0.7, -0.8); run(game, 40);
+  assert.ok(r.player.rotation.y < -0.15, 'right steers right (h=' + r.player.rotation.y.toFixed(2) + ')');
+  // push forward + left -> turns counter-clockwise (heading increases)
+  r.player.position.set(0, 0, 0); r.player.rotation.y = 0;
+  game.setInput(0, 0); run(game, 12);
+  game.setInput(-0.7, -0.8); run(game, 40);
+  assert.ok(r.player.rotation.y > 0.15, 'left steers left (h=' + r.player.rotation.y.toFixed(2) + ')');
   game.setInput(0, 0);
 });
 
 test('steering is smooth: a tiny stick wiggle barely turns the puppy', () => {
   const r = game.refs();
   r.player.position.set(0, 0, 0);
-  game.setInput(0, -1); // settle running straight forward
+  game.setInput(0, -1); // settle driving straight forward
   run(game, 40);
   const before = r.player.rotation.y;
-  // a tiny nudge inside the deadzone should NOT swing the heading around
-  game.setInput(0.1, -0.02);
-  run(game, 1);
+  // a tiny sideways nudge inside the deadzone should NOT swing the heading
+  game.setInput(0.1, -1);
+  run(game, 3);
   let d = Math.abs(r.player.rotation.y - before);
   while (d > Math.PI) d = Math.abs(d - 2 * Math.PI);
   assert.ok(d < 0.05, 'heading barely moved from a tiny wiggle (' + d.toFixed(3) + ' rad)');
