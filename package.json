@@ -1,0 +1,11 @@
+{
+  "name": "dogsim",
+  "version": "1.0.0",
+  "description": "Puppy World — a cute 3D open-world dog simulator for mobile, built with Three.js",
+  "type": "module",
+  "scripts": {
+    "test": "node test/game.test.mjs",
+    "start": "python3 -m http.server 8000"
+  },
+  "license": "MIT"
+}
