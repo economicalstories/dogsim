@@ -12,6 +12,9 @@ export function createGame(THREE){
    Collect bones, befriend kittens, then sleep in your house to start again.
    ========================================================================= */
 
+// Bump this every deploy so you can tell when the page has refreshed to new code.
+const VERSION = 'v8 · 2026-06-07';
+
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
 const NUM_BONES = 8;
@@ -1082,6 +1085,9 @@ function lerpAngle(a,b,t){
 //  Start screen
 // =========================================================================
 function buildStartScreen(){
+  const ver = document.getElementById('version');
+  if(ver) ver.textContent = 'Puppy World ' + VERSION;
+  if(typeof console !== 'undefined') console.log('🐕 Puppy World ' + VERSION);
   const bestStart = document.getElementById('bestStart');
   if(bestStart) bestStart.textContent = bestScore > 0 ? ('🏆 Best score: ' + bestScore) : '';
   const pick = document.getElementById('dogPick');
@@ -1138,6 +1144,6 @@ function buildStartScreen(){
     refs:  () => ({ scene, camera, player, playerHouse, pointer, bones, cats, aiDogs, houses, sparkles, butterflies }),
     setInput: (x, y) => { input.x = x; input.y = y; input.active = !!(x || y); },
     setColor: (i) => { chosenColor = i; },
-    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD, MIN_PLAYER_GAP },
+    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD, MIN_PLAYER_GAP, VERSION },
   };
 }
