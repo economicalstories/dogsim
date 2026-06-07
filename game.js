@@ -12,6 +12,9 @@ export function createGame(THREE){
    Collect bones, befriend kittens, then sleep in your house to start again.
    ========================================================================= */
 
+// Bump this every deploy so you can tell when the page has refreshed to new code.
+const VERSION = 'v8 · 2026-06-07';
+
 // ---------- Config ----------
 const WORLD = 46;           // half-size of the playable ground (was huge -> bones unfindable)
 const NUM_BONES = 8;
@@ -1082,6 +1085,9 @@ function lerpAngle(a,b,t){
 //  Start screen
 // =========================================================================
 function buildStartScreen(){
+  const ver = document.getElementById('version');
+  if(ver) ver.textContent = 'Puppy World ' + VERSION;
+  if(typeof console !== 'undefined') console.log('🐕 Puppy World ' + VERSION);
   const bestStart = document.getElementById('bestStart');
   if(bestStart) bestStart.textContent = bestScore > 0 ? ('🏆 Best score: ' + bestScore) : '';
   const pick = document.getElementById('dogPick');
@@ -1105,9 +1111,23 @@ function buildStartScreen(){
     document.getElementById('playBtn').classList.add('hidden');
     document.getElementById('loading').classList.remove('hidden');
     setTimeout(()=>{
-      document.getElementById('start').classList.add('hidden');
-      init();
-      showBanner('🐾 Go collect all the bones! 🦴', 2.6);
+      try {
+        document.getElementById('start').classList.add('hidden');
+        init();
+        showBanner('🐾 Go collect all the bones! 🦴', 2.6);
+      } catch(err){
+        // Surface failures (e.g. no WebGL) instead of a blank/dead screen.
+        started = false;
+        const start = document.getElementById('start');
+        start.classList.remove('hidden');
+        document.getElementById('playBtn').classList.remove('hidden');
+        const loading = document.getElementById('loading');
+        loading.classList.remove('hidden');
+        loading.classList.add('error');
+        loading.textContent = '😢 Could not start the game: ' + (err && err.message ? err.message : err) +
+          '. Try a different browser, or make sure 3D/WebGL is enabled.';
+        if(typeof console !== 'undefined') console.error('Puppy World failed to start:', err);
+      }
     }, 60);
   });
 }
@@ -1124,6 +1144,6 @@ function buildStartScreen(){
     refs:  () => ({ scene, camera, player, playerHouse, pointer, bones, cats, aiDogs, houses, sparkles, butterflies }),
     setInput: (x, y) => { input.x = x; input.y = y; input.active = !!(x || y); },
     setColor: (i) => { chosenColor = i; },
-    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD, MIN_PLAYER_GAP },
+    config: { NUM_BONES, NUM_CATS, NUM_AI_DOGS, WORLD, MIN_PLAYER_GAP, VERSION },
   };
 }

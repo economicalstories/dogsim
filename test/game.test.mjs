@@ -37,6 +37,10 @@ game.setColor(2);
 game.init();
 const { NUM_BONES, NUM_CATS, NUM_AI_DOGS } = game.config;
 
+test('exposes a version string', () => {
+  assert.ok(typeof game.config.VERSION === 'string' && game.config.VERSION.length > 0, 'has a version');
+});
+
 test('world builds with the right number of things', () => {
   const r = game.refs();
   assert.strictEqual(r.bones.length, NUM_BONES, 'bones');
